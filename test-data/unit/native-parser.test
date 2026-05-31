@@ -3307,3 +3307,65 @@ MypyFile:1(
             Args(
               NameExpr(x)
               StrExpr())))))))
+
+[case testAnnotatedAtSyntaxConsolidated]
+def f(x: int @ "meta", y: int @ "m1" @ "m2") -> None:
+    pass
+def g(x: (int | str) @ "meta") -> None:
+    pass
+[out]
+MypyFile:1(
+  FuncDef:1(
+    f
+    Args(
+      Var(x)
+      Var(y))
+    def (x: Annotated?[int?, meta?], y: Annotated?[int?, m1?, m2?]) -> None?
+    Block:2(
+      PassStmt:2()))
+  FuncDef:3(
+    g
+    Args(
+      Var(x))
+    def (x: Annotated?[int? | str?, meta?]) -> None?
+    Block:4(
+      PassStmt:4())))
+
+[case testAnnotatedMetadataBitOrConsolidated]
+from typing import Annotated
+def f(x: Annotated[int, flag1 | flag2]) -> None:
+    pass
+def g(x: int @ (flag1 | flag2)) -> None:
+    pass
+[out]
+MypyFile:1(
+  ImportFrom:1(typing, [Annotated])
+  FuncDef:2(
+    f
+    Args(
+      Var(x))
+    def (x: Annotated?[int?, flag1? | flag2?]) -> None?
+    Block:3(
+      PassStmt:3()))
+  FuncDef:4(
+    g
+    Args(
+      Var(x))
+    def (x: Annotated?[int?, flag1? | flag2?]) -> None?
+    Block:5(
+      PassStmt:5())))
+
+[case testAnnotatedAtSyntaxQualified]
+import typing
+def f(x: typing.Annotated[int, "m1"] @ "m2") -> None:
+    pass
+[out]
+MypyFile:1(
+  Import:1(typing)
+  FuncDef:2(
+    f
+    Args(
+      Var(x))
+    def (x: typing.Annotated?[int?, m1?, m2?]) -> None?
+    Block:3(
+      PassStmt:3())))
