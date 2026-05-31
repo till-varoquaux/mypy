@@ -750,7 +750,10 @@ class TypeAnalyser(SyntheticTypeVisitor[Type], TypeAnalyzerPluginInterface):
                 )
                 return AnyType(TypeOfAny.from_error)
             return self.anal_type(
-                t.args[0], allow_typed_dict_special_forms=self.allow_typed_dict_special_forms
+                t.args[0],
+                nested=False,
+                allow_typed_dict_special_forms=self.allow_typed_dict_special_forms,
+                allow_final=self.allow_final,
             )
         elif fullname in ("typing_extensions.Required", "typing.Required"):
             if not self.allow_typed_dict_special_forms:
@@ -1321,6 +1324,12 @@ class TypeAnalyser(SyntheticTypeVisitor[Type], TypeAnalyzerPluginInterface):
 
     def anal_star_arg_type(self, t: Type, kind: ArgKind, nested: bool) -> tuple[str | None, Type]:
         """Analyze signature argument type for *args and **kwargs argument."""
+        while isinstance(t, UnboundType) and len(t.args) >= 2:
+            sym = self.lookup_qualified(t.name, t)
+            if sym is not None and sym.node is not None and sym.node.fullname in ANNOTATED_TYPE_NAMES:
+                t = t.args[0]
+            else:
+                break
         if isinstance(t, UnboundType) and t.name and "." in t.name and not t.args:
             components = t.name.split(".")
             tvar_name = ".".join(components[:-1])

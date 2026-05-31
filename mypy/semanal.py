@@ -367,14 +367,14 @@ Tag: _TypeAlias = int
 # Any string literal matching this common pattern cannot be a valid
 # type expression and can be ignored quickly when attempting to parse a
 # string literal as a type expression.
-_MULTIPLE_WORDS_NONTYPE_RE = re.compile(r'\s*[^\s.\'"|\[]+\s+[^\s.\'"|\[]')
+_MULTIPLE_WORDS_NONTYPE_RE = re.compile(r'\s*[^\s.\'"|@\[]+\s+[^\s.\'"|@\[]')
 
 # Characters which never appear in a valid type expression.
-# NOTE: Allows '*' for (PEP 646 Unpack) and '+' for (Literal[+N])
+# NOTE: Allows '*' for (PEP 646 Unpack), '+' for (Literal[+N]), and '@' for (PEP 835 Annotated)
 # NOTE: Stored as a tuple of single-character strings (rather than a str)
 #       so that iterating it does not allocate a new string per character
 #       when compiled with mypyc.
-_NONTYPE_CHARS: Final = tuple("!:/<>@%$^?;&~`\\")
+_NONTYPE_CHARS: Final = tuple("!:/<>%$^?;&~`\\")
 
 
 class SemanticAnalyzer(
@@ -3530,6 +3530,11 @@ class SemanticAnalyzer(
                 return False
             if self.should_wait_rhs(rv.left) or self.should_wait_rhs(rv.right):
                 return True
+        if isinstance(rv, OpExpr) and rv.op == "@":
+            if self.is_stub_file:
+                return False
+            if self.should_wait_rhs(rv.left):
+                return True
         elif isinstance(rv, CallExpr) and isinstance(rv.callee, RefExpr):
             # This is only relevant for builtin SCC where things like 'TypeVar'
             # may be not ready.
@@ -3556,6 +3561,11 @@ class SemanticAnalyzer(
             if self.can_be_type_alias(rv.left, allow_none=True) and self.can_be_type_alias(
                 rv.right, allow_none=True
             ):
+                return True
+        if isinstance(rv, OpExpr) and rv.op == "@":
+            if self.is_stub_file:
+                return True
+            if self.can_be_type_alias(rv.left, allow_none=True):
                 return True
         return False
 
@@ -3778,8 +3788,9 @@ class SemanticAnalyzer(
         explicit = s.unanalyzed_type is not None
         if self.is_final_type(s.unanalyzed_type):
             # We need to exclude bare Final.
-            assert isinstance(s.unanalyzed_type, UnboundType)
-            if not s.unanalyzed_type.args:
+            unwrapped = self.unwrap_annotated(s.unanalyzed_type)
+            assert isinstance(unwrapped, UnboundType)
+            if not unwrapped.args:
                 explicit = False
 
         if s.rvalue:
@@ -3850,11 +3861,12 @@ class SemanticAnalyzer(
         """
         if not s.unanalyzed_type or not self.is_final_type(s.unanalyzed_type):
             return False
-        assert isinstance(s.unanalyzed_type, UnboundType)
-        if len(s.unanalyzed_type.args) > 1:
-            self.fail("Final[...] takes at most one type argument", s.unanalyzed_type)
+        unwrapped = self.unwrap_annotated(s.unanalyzed_type)
+        assert isinstance(unwrapped, UnboundType)
+        if len(unwrapped.args) > 1:
+            self.fail("Final[...] takes at most one type argument", unwrapped)
         invalid_bare_final = False
-        if not s.unanalyzed_type.args:
+        if not unwrapped.args:
             s.type = None
             if (
                 isinstance(s.rvalue, TempNode)
@@ -3865,7 +3877,7 @@ class SemanticAnalyzer(
                 invalid_bare_final = True
                 self.fail("Type in Final[...] can only be omitted if there is an initializer", s)
         else:
-            s.type = s.unanalyzed_type.args[0]
+            s.type = unwrapped.args[0]
 
         if (
             s.type is not None
@@ -5384,12 +5396,13 @@ class SemanticAnalyzer(
             return
         if not s.type or not self.is_classvar(s.type):
             return
-        assert isinstance(s.type, UnboundType)
+        cvar_type = self.unwrap_annotated(s.type)
+        assert isinstance(cvar_type, UnboundType)
         if self.is_class_scope() and isinstance(lvalue, NameExpr):
             node = lvalue.node
             if isinstance(node, Var):
                 node.is_classvar = True
-            analyzed = self.anal_type(s.type)
+            analyzed = self.anal_type(cvar_type)
             assert self.type is not None
             if (
                 analyzed is not None
@@ -5401,22 +5414,33 @@ class SemanticAnalyzer(
             # In case of member access, report error only when assigning to self
             # Other kinds of member assignments should be already reported
             self.fail_invalid_classvar(lvalue)
-        if not s.type.args:
+        if not cvar_type.args:
             if isinstance(s.rvalue, TempNode) and s.rvalue.no_rhs:
                 if self.options.disallow_any_generics:
                     self.fail("ClassVar without type argument becomes Any", s, code=codes.TYPE_ARG)
                 return
             s.type = None
 
+    def unwrap_annotated(self, typ: Type | None) -> Type | None:
+        while isinstance(typ, UnboundType) and len(typ.args) >= 2:
+            sym = self.lookup_qualified(typ.name, typ)
+            if sym and sym.node and sym.node.fullname in ANNOTATED_TYPE_NAMES:
+                typ = typ.args[0]
+            else:
+                break
+        return typ
+
     def is_classvar(self, typ: Type) -> bool:
-        if not isinstance(typ, UnboundType):
+        typ_unwrapped = self.unwrap_annotated(typ)
+        if not isinstance(typ_unwrapped, UnboundType):
             return False
-        sym = self.lookup_qualified(typ.name, typ)
+        sym = self.lookup_qualified(typ_unwrapped.name, typ_unwrapped)
         if not sym or not sym.node:
             return False
         return sym.node.fullname == "typing.ClassVar"
 
     def is_final_type(self, typ: Type | None) -> bool:
+        typ = self.unwrap_annotated(typ)
         if not isinstance(typ, UnboundType):
             return False
         sym = self.lookup_qualified(typ.name, typ)
@@ -6853,6 +6877,9 @@ class SemanticAnalyzer(
         is true or the current namespace is incomplete. In the latter case
         defer.
         """
+        if name == "@Annotated":
+            # Synthesized from native `@` operator syntax
+            return self.lookup_fully_qualified_or_none("typing.Annotated")
         if "." not in name:
             # Simple case: look up a short name.
             return self.lookup(name, ctx, suppress_errors=suppress_errors)
@@ -8212,8 +8239,8 @@ class SemanticAnalyzer(
                 maybe_type_expr.as_type = None
                 return
         elif isinstance(maybe_type_expr, OpExpr):
-            if maybe_type_expr.op != "|":
-                # Binary operators other than '|' never spell a valid type
+            if maybe_type_expr.op not in ("|", "@"):
+                # Binary operators other than '|' and '@' never spell a valid type
                 maybe_type_expr.as_type = None
                 return
         else:

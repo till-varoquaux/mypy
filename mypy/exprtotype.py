@@ -157,6 +157,10 @@ def expr_to_unanalyzed_type(
             ],
             uses_pep604_syntax=True,
         )
+    elif isinstance(expr, OpExpr) and expr.op == "@":
+        return expr_to_unanalyzed_type(
+            expr.left, options, allow_new_syntax, expr, lookup_qualified=lookup_qualified
+        )
     elif isinstance(expr, CallExpr) and isinstance(_parent, ListExpr):
         c = expr.callee
         names = []

@@ -1,0 +1,117 @@
+[case testAnnotatedAtSyntax]
+from typing import Annotated
+def f(x: int @ "meta") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxNested]
+from typing import Annotated
+def f(x: int @ "m1" @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxUnion]
+from typing import Annotated
+def f(x: (int | str) @ "meta") -> None:
+    reveal_type(x)
+def g(y: int | str @ "meta") -> None:
+    reveal_type(y)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int | builtins.str"
+main:5: note: Revealed type is "builtins.int | builtins.str"
+
+[case testAnnotatedAtSyntaxError]
+from typing import Annotated
+def f(x: Annotated[int]) -> None: # E: Annotated[...] must have exactly one type argument and at least one annotation
+    pass
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+
+[case testAnnotatedAtSyntaxQualified]
+import typing
+
+def f(x: typing.Annotated[int, "m1"] @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:4: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxNoImports]
+def f(x: int @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:2: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxTypeAliasesAndContexts]
+from typing import TypeVar, cast
+from typing_extensions import TypeAlias
+
+Alias1 = int @ "m1"
+Alias2: TypeAlias = str @ "m2"
+type Alias3 = bytes @ "m3"
+
+T = TypeVar("T", bound=int @ "m4")
+
+def f(a: Alias1, b: Alias2, c: Alias3, x: object, t: T) -> T:
+    reveal_type(a)
+    reveal_type(b)
+    reveal_type(c)
+    y = cast(int @ "m5", x)
+    reveal_type(y)
+    reveal_type(t)
+    return t
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:11: note: Revealed type is "builtins.int"
+main:12: note: Revealed type is "builtins.str"
+main:13: note: Revealed type is "builtins.bytes"
+main:15: note: Revealed type is "builtins.int"
+main:16: note: Revealed type is "T`-1"
+
+[case testAnnotatedAtSyntaxQualifiersAndParamSpec]
+from dataclasses import dataclass, InitVar
+from typing import ClassVar, Final, TypedDict, ParamSpec, Callable
+from typing_extensions import NotRequired, Required, ReadOnly
+
+P = ParamSpec("P")
+
+def deco(f: Callable[P, int]) -> Callable[P, int]:
+    def wrapper(*args: P.args @ "m1", **kwargs: P.kwargs @ "m2") -> int:
+        return f(*args, **kwargs)
+    return wrapper
+
+class TD(TypedDict):
+    a: NotRequired[int] @ "m1"
+    b: Required[str] @ "m2"
+    c: ReadOnly[int] @ "m3"
+
+@dataclass
+class DC:
+    x: int @ "m1"
+    y: InitVar[str] @ "m2"
+    cv: ClassVar[int] @ "m3" = 1
+    fin: Final[int] @ "m4" = 2
+
+    def __post_init__(self, y: str) -> None:
+        reveal_type(y)
+
+dc = DC(1, "hello")
+reveal_type(dc.x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/dict.pyi]
+[out]
+main:25: note: Revealed type is "builtins.str"
+main:28: note: Revealed type is "builtins.int"
+

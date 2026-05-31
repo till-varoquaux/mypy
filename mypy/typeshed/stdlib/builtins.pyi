@@ -235,6 +235,8 @@ class type:
     __annotations__: dict[str, AnnotationForm]
     if sys.version_info >= (3, 14):
         __annotate__: AnnotateFunc | None
+    if sys.version_info >= (3, 15):
+        def __matmul__(self, value: Any, /) -> AnnotationForm: ...
 
 @disjoint_base
 class super:

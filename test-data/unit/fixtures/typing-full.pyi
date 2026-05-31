@@ -43,6 +43,7 @@ Unpack = 0
 Callable: _SpecialForm
 Union: _SpecialForm
 Literal: _SpecialForm
+Annotated: _SpecialForm
 
 T = TypeVar('T')
 T_co = TypeVar('T_co', covariant=True)
