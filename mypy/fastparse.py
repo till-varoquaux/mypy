@@ -2025,9 +2025,13 @@ class TypeConverter:
         return UnboundType(n.id, line=self.line, column=self.convert_column(n.col_offset))
 
     def visit_BinOp(self, n: ast3.BinOp) -> Type:
-        if not isinstance(n.op, ast3.BitOr):
-            return self.invalid_type(n)
+        if isinstance(n.op, ast3.BitOr):
+            return self.visit_union_type(n)
+        if isinstance(n.op, ast3.MatMult):
+            return self.visit_annotated_type(n)
+        return self.invalid_type(n)
 
+    def visit_union_type(self, n: ast3.BinOp) -> Type:
         left = self.visit(n.left)
         right = self.visit(n.right)
         return UnionType(
@@ -2036,6 +2040,38 @@ class TypeConverter:
             column=self.convert_column(n.col_offset),
             is_evaluated=self.is_evaluated,
             uses_pep604_syntax=True,
+        )
+
+    def visit_annotated_type(self, n: ast3.BinOp) -> Type:
+        left = self.visit(n.left)
+        right = self.visit(n.right)
+
+        # Default fallback name
+        node_name = "@Annotated"
+
+        if isinstance(left, UnboundType):
+            # If the left side already carries a qualified path, preserve it
+            if left.name.endswith("Annotated") or left.name.endswith("AnnotatedType"):
+                node_name = left.name
+
+            # Flattening logic
+            if left.name in (
+                "Annotated",
+                "typing.Annotated",
+                "typing_extensions.Annotated",
+                "types.AnnotatedType",
+            ):
+                args = list(left.args) + [right]
+            else:
+                args = [left, right]
+        else:
+            args = [left, right]
+
+        return UnboundType(
+            node_name,
+            args,
+            line=self.line,
+            column=self.convert_column(n.col_offset),
         )
 
     def visit_Constant(self, n: ast3.Constant) -> Type:

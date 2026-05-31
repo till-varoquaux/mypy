@@ -1,0 +1,59 @@
+[case testAnnotatedAtSyntax]
+from typing import Annotated
+def f(x: int @ "meta") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxNested]
+from typing import Annotated
+def f(x: int @ "m1" @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxUnion]
+from typing import Annotated
+def f(x: (int | str) @ "meta") -> None:
+    reveal_type(x)
+def g(y: int | str @ "meta") -> None:
+    reveal_type(y)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:3: note: Revealed type is "builtins.int | builtins.str"
+main:5: note: Revealed type is "builtins.int | builtins.str"
+
+[case testAnnotatedAtSyntaxError]
+from typing import Annotated
+import types
+def f(x: types.AnnotatedType[int]) -> None: # E: Annotated[...] must have exactly one type argument and at least one annotation
+    pass
+[file types.py]
+from typing import Any
+AnnotatedType: Any
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+
+[case testAnnotatedAtSyntaxQualified]
+import typing
+import types
+
+def f(x: typing.Annotated[int, "m1"] @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:5: note: Revealed type is "builtins.int"
+
+[case testAnnotatedAtSyntaxNoImports]
+def f(x: int @ "m2") -> None:
+    reveal_type(x)
+[typing fixtures/typing-full.pyi]
+[builtins fixtures/tuple.pyi]
+[out]
+main:2: note: Revealed type is "builtins.int"

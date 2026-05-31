@@ -146,7 +146,11 @@ TYPE_CHECK_ONLY_NAMES: Final = ("typing.type_check_only", "typing_extensions.typ
 LITERAL_TYPE_NAMES: Final = ("typing.Literal", "typing_extensions.Literal")
 
 # Supported Annotated type names.
-ANNOTATED_TYPE_NAMES: Final = ("typing.Annotated", "typing_extensions.Annotated")
+ANNOTATED_TYPE_NAMES: Final = (
+    "typing.Annotated",
+    "typing_extensions.Annotated",
+    "types.AnnotatedType",
+)
 
 # Supported Concatenate type names.
 CONCATENATE_TYPE_NAMES: Final = ("typing.Concatenate", "typing_extensions.Concatenate")

@@ -6758,6 +6758,9 @@ class SemanticAnalyzer(
         is true or the current namespace is incomplete. In the latter case
         defer.
         """
+        if name == "@Annotated":
+            # Synthesized from native `@` operator syntax
+            return self.lookup_fully_qualified_or_none("typing.Annotated")
         if "." not in name:
             # Simple case: look up a short name.
             return self.lookup(name, ctx, suppress_errors=suppress_errors)
@@ -8194,9 +8197,10 @@ class SemanticAnalyzer(
 
     @staticmethod
     def var_is_typing_special_form(var: Var) -> bool:
-        return var.fullname.startswith("typing") and var.fullname in [
+        return var.fullname.startswith(("typing", "types")) and var.fullname in [
             "typing.Annotated",
             "typing_extensions.Annotated",
+            "types.AnnotatedType",
             "typing.Callable",
             "typing.Literal",
             "typing_extensions.Literal",
